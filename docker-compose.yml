@@ -1,0 +1,47 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: stocksim-postgres
+    environment:
+      POSTGRES_DB: ${DB_NAME:-stocksim}
+      POSTGRES_USER: ${DB_USER:-stocksim}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-stocksim}
+      TZ: UTC
+      PGTZ: UTC
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  adminer:
+    image: adminer:latest
+    container_name: stocksim-adminer
+    ports:
+      - "${ADMINER_PORT:-8081}:8080"
+    environment:
+      ADMINER_DEFAULT_SERVER: postgres
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  app:
+    profiles: ["app"]
+    build: .
+    container_name: stocksim-app
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/${DB_NAME:-stocksim}
+      DB_USER: ${DB_USER:-stocksim}
+      DB_PASSWORD: ${DB_PASSWORD:-stocksim}
+    ports:
+      - "${APP_PORT:-8080}:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  postgres-data:
