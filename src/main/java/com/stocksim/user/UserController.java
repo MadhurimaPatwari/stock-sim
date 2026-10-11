@@ -2,15 +2,12 @@ package com.stocksim.user;
 
 import java.net.URI;
 import java.time.Instant;
-import java.util.Locale;
 import java.util.UUID;
-
-import com.stocksim.currency.CurrencyRepository;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
-import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -19,17 +16,28 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
+
 /**
- * Minimal user endpoints, mainly to check the app and database are wired up.
+ * HTTP layer for users: request validation and JSON mapping. Business rules live in {@link UserService}.
  *
- * POST /api/users       create a user
- * GET  /api/users/{id}  fetch a user
+ * POST /api/users       sign up (public)
+ * GET  /api/me          the logged-in user
+ * GET  /api/users/{id}  fetch a user (only yourself)
  */
 @RestController
-@RequestMapping("/api/users")
+@RequestMapping("/api")
 public class UserController {
 
-    public record CreateUserRequest(String email, String password, String displayName, String reportingCurrency) {}
+    public record CreateUserRequest(
+            @NotBlank @Email @Size(max = 254) String email,
+            @NotBlank @Size(min = 8, max = 72) String password,
+            @Size(max = 100) String displayName,
+            @Pattern(regexp = "[A-Za-z]{3}", message = "must be a 3-letter currency code like EUR") String reportingCurrency) {}
 
     public record UserResponse(UUID id, String email, String displayName, String status,
                                String reportingCurrency, Instant createdAt) {
@@ -39,42 +47,32 @@ public class UserController {
         }
     }
 
-    private final UserRepository users;
-    private final CurrencyRepository currencies;
-    private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
+    private final UserService userService;
 
-    public UserController(UserRepository users, CurrencyRepository currencies) {
-        this.users = users;
-        this.currencies = currencies;
+    public UserController(UserService userService) {
+        this.userService = userService;
     }
 
-    @PostMapping
-    public ResponseEntity<UserResponse> create(@RequestBody CreateUserRequest req) {
-        if (req.email() == null || !req.email().contains("@")) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "email is required");
-        }
-        if (req.password() == null || req.password().length() < 8) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "password must be at least 8 characters");
-        }
-
-        String email = req.email().trim().toLowerCase(Locale.ROOT);
-        String currency = req.reportingCurrency() == null ? "EUR" : req.reportingCurrency().trim().toUpperCase(Locale.ROOT);
-        if (!currencies.existsById(currency)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "unsupported reportingCurrency '" + currency + "'; see GET /api/currencies");
-        }
-        if (users.existsByEmail(email)) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "email already registered");
-        }
-
-        User saved = users.save(new User(email, passwordEncoder.encode(req.password()), req.displayName(), currency));
+    @PostMapping("/users")
+    public ResponseEntity<UserResponse> create(@Valid @RequestBody CreateUserRequest req) {
+        User saved = userService.register(req.email(), req.password(), req.displayName(), req.reportingCurrency());
         return ResponseEntity.created(URI.create("/api/users/" + saved.getId())).body(UserResponse.from(saved));
     }
 
-    @GetMapping("/{id}")
-    public UserResponse get(@PathVariable UUID id) {
-        return users.findById(id)
-                .map(UserResponse::from)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "user not found"));
+    @GetMapping("/me")
+    public UserResponse me(@AuthenticationPrincipal Jwt jwt) {
+        return UserResponse.from(userService.get(currentUserId(jwt)));
+    }
+
+    @GetMapping("/users/{id}")
+    public UserResponse get(@PathVariable UUID id, @AuthenticationPrincipal Jwt jwt) {
+         if (!id.equals(currentUserId(jwt))) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "you can only view your own user");
+        }
+        return UserResponse.from(userService.get(id));
+    }
+
+    private static UUID currentUserId(Jwt jwt) {
+        return UUID.fromString(jwt.getSubject());
     }
 }

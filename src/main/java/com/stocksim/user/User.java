@@ -50,6 +50,12 @@ public class User {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
+    @Column(name = "failed_login_attempts", nullable = false)
+    private int failedLoginAttempts;
+
+    @Column(name = "locked_until")
+    private Instant lockedUntil;
+
     @Version
     private long version;
 
@@ -75,6 +81,36 @@ public class User {
     @PreUpdate
     void onUpdate() {
         updatedAt = Instant.now();
+    }
+
+    public boolean isLocked(Instant now) {
+        return lockedUntil != null && lockedUntil.isAfter(now);
+    }
+
+    /**
+     * Counts a wrong password. On the {@code maxAttempts}-th consecutive failure the account is locked
+     * until {@code lockUntil} and the counter starts over.
+     *
+     * @return true if this failure locked the account
+     */
+    public boolean recordFailedLogin(int maxAttempts, Instant lockUntil) {
+        failedLoginAttempts++;
+        if (failedLoginAttempts >= maxAttempts) {
+            lockedUntil = lockUntil;
+            failedLoginAttempts = 0;
+            return true;
+        }
+        return false;
+    }
+
+    public void recordSuccessfulLogin() {
+        failedLoginAttempts = 0;
+    }
+
+    public void changePassword(String newPasswordHash) {
+        passwordHash = newPasswordHash;
+        failedLoginAttempts = 0;
+        lockedUntil = null;
     }
 
     public UUID getId() { return id; }

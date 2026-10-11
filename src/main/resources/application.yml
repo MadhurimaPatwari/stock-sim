@@ -21,6 +21,23 @@ spring:
     enabled: true
     locations: classpath:db/migration
 
+  web:
+    error:
+      # Show our exception messages in error responses. Safe because we write them ourselves;
+      # stack traces stay hidden (include-stacktrace defaults to never).
+      include-message: always
+      # include-binding-errors stays off: it echoes rejected values (including passwords) back to the client.
+      # Field errors are returned by our own exception handler instead.
+
+stocksim:
+  jwt:
+    # HMAC key that signs login tokens. Anyone with it can mint tokens: set JWT_SECRET outside local dev.
+    secret: ${JWT_SECRET:local-dev-only-secret-do-not-use-in-production}
+    ttl: 1h
+  auth:
+    # How long an account stays locked after too many wrong passwords.
+    lockout-duration: 24h
+
 server:
   port: 8080
 
