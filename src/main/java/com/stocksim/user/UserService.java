@@ -5,6 +5,7 @@ import java.util.UUID;
 
 import com.stocksim.currency.CurrencyRepository;
 import com.stocksim.currency.UnsupportedCurrencyException;
+import com.stocksim.portfolio.PortfolioService;
 
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -17,11 +18,14 @@ public class UserService {
     private final UserRepository users;
     private final CurrencyRepository currencies;
     private final PasswordEncoder passwordEncoder;
+    private final PortfolioService portfolioService;
 
-    public UserService(UserRepository users, CurrencyRepository currencies, PasswordEncoder passwordEncoder) {
+    public UserService(UserRepository users, CurrencyRepository currencies, PasswordEncoder passwordEncoder,
+                       PortfolioService portfolioService) {
         this.users = users;
         this.currencies = currencies;
         this.passwordEncoder = passwordEncoder;
+        this.portfolioService = portfolioService;
     }
 
     /**
@@ -44,7 +48,10 @@ public class UserService {
             throw new EmailAlreadyRegisteredException(normalizedEmail);
         }
 
-        return users.save(new User(normalizedEmail, passwordEncoder.encode(rawPassword), displayName, currency));
+        User user = users.save(new User(normalizedEmail, passwordEncoder.encode(rawPassword), displayName, currency));
+        // Same transaction: a user is never left without a portfolio.
+        portfolioService.open(user.getId(), currency);
+        return user;
     }
 
     @Transactional(readOnly = true)
