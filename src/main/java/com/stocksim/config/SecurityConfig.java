@@ -47,7 +47,7 @@ public class SecurityConfig {
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.POST, "/api/users", "/api/auth/**").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/currencies").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/currencies", "/health").permitAll()
                         .requestMatchers("/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**").permitAll()
                         .requestMatchers("/actuator/health/**", "/actuator/info").permitAll()
                         // Spring forwards errors to /error; without this a 400 on a public route would turn into a 401.
