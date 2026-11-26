@@ -2,6 +2,7 @@ package com.stocksim.auth;
 
 import java.time.Instant;
 import java.util.Locale;
+import java.util.TreeSet;
 
 import com.stocksim.email.EmailSender;
 import com.stocksim.user.User;
@@ -85,6 +86,8 @@ public class AuthService {
                 .issuedAt(now)
                 .expiresAt(expiresAt)
                 .claim("email", user.getEmail())
+                // A logged-in user may do everything; API keys get a subset (see ApiKeyService).
+                .claim("scope", String.join(" ", new TreeSet<>(Scopes.LOGIN)))
                 .build();
         JwsHeader header = JwsHeader.with(MacAlgorithm.HS256).build();
         String token = jwtEncoder.encode(JwtEncoderParameters.from(header, claims)).getTokenValue();
