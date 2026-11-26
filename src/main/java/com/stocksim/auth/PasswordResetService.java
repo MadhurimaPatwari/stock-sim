@@ -1,13 +1,7 @@
 package com.stocksim.auth;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.security.SecureRandom;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.Base64;
-import java.util.HexFormat;
 import java.util.Locale;
 
 import com.stocksim.email.EmailSender;
@@ -23,7 +17,6 @@ public class PasswordResetService {
 
     static final Duration TOKEN_TTL = Duration.ofMinutes(30);
 
-    private final SecureRandom random = new SecureRandom();
     private final UserRepository users;
     private final PasswordResetTokenRepository tokens;
     private final PasswordEncoder passwordEncoder;
@@ -40,11 +33,9 @@ public class PasswordResetService {
     @Transactional
     public void requestReset(String email) {
         users.findByEmail(email.trim().toLowerCase(Locale.ROOT)).ifPresent(user -> {
-            byte[] bytes = new byte[32];
-            random.nextBytes(bytes);
-            String token = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+            String token = Tokens.newSecret();
 
-            tokens.save(new PasswordResetToken(user.getId(), sha256(token), Instant.now().plus(TOKEN_TTL)));
+            tokens.save(new PasswordResetToken(user.getId(), Tokens.sha256(token), Instant.now().plus(TOKEN_TTL)));
             emailSender.send(user.getEmail(), "Reset your stock-sim password",
                     "Use this token with POST /api/auth/reset-password within "
                             + TOKEN_TTL.toMinutes() + " minutes:\n\n" + token);
@@ -59,21 +50,12 @@ public class PasswordResetService {
     @Transactional
     public void resetPassword(String token, String newPassword) {
         Instant now = Instant.now();
-        PasswordResetToken resetToken = tokens.findWithLockByTokenHash(sha256(token))
+        PasswordResetToken resetToken = tokens.findWithLockByTokenHash(Tokens.sha256(token))
                 .filter(t -> t.isUsable(now))
                 .orElseThrow(InvalidResetTokenException::new);
         User user = users.findById(resetToken.getUserId()).orElseThrow(InvalidResetTokenException::new);
 
         user.changePassword(passwordEncoder.encode(newPassword));
         resetToken.markUsed(now);
-    }
-
-    private static String sha256(String value) {
-        try {
-            byte[] hash = MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8));
-            return HexFormat.of().formatHex(hash);
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException("SHA-256 is always available in the JDK", e);
-        }
     }
 }

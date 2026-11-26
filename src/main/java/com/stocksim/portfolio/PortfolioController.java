@@ -8,8 +8,7 @@ import com.stocksim.portfolio.PortfolioService.LedgerEntryView;
 import com.stocksim.portfolio.PortfolioService.PortfolioView;
 
 import org.springframework.http.HttpStatus;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -44,28 +43,28 @@ public class PortfolioController {
     }
 
     @GetMapping
-    public List<PortfolioView> mine(@AuthenticationPrincipal Jwt jwt) {
-        return portfolioService.listFor(currentUserId(jwt));
+    public List<PortfolioView> mine(Authentication auth) {
+        return portfolioService.listFor(currentUserId(auth));
     }
 
     @GetMapping("/{id}")
-    public PortfolioView get(@PathVariable UUID id, @AuthenticationPrincipal Jwt jwt) {
-        return portfolioService.get(id, currentUserId(jwt));
+    public PortfolioView get(@PathVariable UUID id, Authentication auth) {
+        return portfolioService.get(id, currentUserId(auth));
     }
 
     @PostMapping("/{id}/deposits")
     @ResponseStatus(HttpStatus.CREATED)
     public LedgerEntryView deposit(@PathVariable UUID id, @Valid @RequestBody DepositRequest req,
-                                   @AuthenticationPrincipal Jwt jwt) {
-        return portfolioService.deposit(id, currentUserId(jwt), req.amount());
+                                   Authentication auth) {
+        return portfolioService.deposit(id, currentUserId(auth), req.amount());
     }
 
     @GetMapping("/{id}/ledger")
-    public List<LedgerEntryView> ledger(@PathVariable UUID id, @AuthenticationPrincipal Jwt jwt) {
-        return portfolioService.ledger(id, currentUserId(jwt));
+    public List<LedgerEntryView> ledger(@PathVariable UUID id, Authentication auth) {
+        return portfolioService.ledger(id, currentUserId(auth));
     }
 
-    private static UUID currentUserId(Jwt jwt) {
-        return UUID.fromString(jwt.getSubject());
+    private static UUID currentUserId(Authentication auth) {
+        return UUID.fromString(auth.getName());   // the user id, for login JWTs and API keys alike
     }
 }
