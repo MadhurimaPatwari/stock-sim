@@ -19,7 +19,7 @@ import jakarta.persistence.Table;
 @Table(name = "ledger_entries")
 public class LedgerEntry {
 
-    public enum Type { DEPOSIT }
+    public enum Type { DEPOSIT, WITHDRAWAL }
 
     @Id
     private UUID id;

@@ -54,6 +54,7 @@ public class SecurityConfig {
                         .requestMatchers("/error").permitAll()
                         // Scopes: first matching rule wins, so these come before anyRequest().
                         .requestMatchers(HttpMethod.POST, "/api/portfolios/*/deposits").hasAuthority(scope(Scopes.PORTFOLIO_DEPOSIT))
+                        .requestMatchers(HttpMethod.POST, "/api/portfolios/*/withdrawals").hasAuthority(scope(Scopes.PORTFOLIO_WITHDRAW))
                         .requestMatchers(HttpMethod.GET, "/api/portfolios/**").hasAuthority(scope(Scopes.PORTFOLIO_READ))
                         .requestMatchers("/api/api-keys/**").hasAuthority(scope(Scopes.API_KEYS_MANAGE))
                         .anyRequest().authenticated())

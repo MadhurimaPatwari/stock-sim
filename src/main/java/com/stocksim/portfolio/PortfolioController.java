@@ -28,6 +28,7 @@ import jakarta.validation.constraints.Positive;
  * GET  /api/portfolios                  my portfolios with cash balance
  * GET  /api/portfolios/{id}             one portfolio
  * POST /api/portfolios/{id}/deposits    add virtual cash
+ * POST /api/portfolios/{id}/withdrawals take cash out (409 if the balance is too low)
  * GET  /api/portfolios/{id}/ledger      every cash movement, oldest first
  */
 @RestController
@@ -35,6 +36,9 @@ import jakarta.validation.constraints.Positive;
 public class PortfolioController {
 
     public record DepositRequest(@NotNull @Positive @Digits(integer = 15, fraction = 4) BigDecimal amount) {}
+
+    /** The amount to take out, as a positive number; it is stored as a negative ledger entry. */
+    public record WithdrawalRequest(@NotNull @Positive @Digits(integer = 15, fraction = 4) BigDecimal amount) {}
 
     private final PortfolioService portfolioService;
 
@@ -57,6 +61,13 @@ public class PortfolioController {
     public LedgerEntryView deposit(@PathVariable UUID id, @Valid @RequestBody DepositRequest req,
                                    Authentication auth) {
         return portfolioService.deposit(id, currentUserId(auth), req.amount());
+    }
+
+    @PostMapping("/{id}/withdrawals")
+    @ResponseStatus(HttpStatus.CREATED)
+    public LedgerEntryView withdraw(@PathVariable UUID id, @Valid @RequestBody WithdrawalRequest req,
+                                    Authentication auth) {
+        return portfolioService.withdraw(id, currentUserId(auth), req.amount());
     }
 
     @GetMapping("/{id}/ledger")

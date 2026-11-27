@@ -3,6 +3,7 @@ package com.stocksim.portfolio;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import com.stocksim.currency.CurrencyRepository;
@@ -55,10 +56,32 @@ public class PortfolioService {
     public LedgerEntryView deposit(UUID portfolioId, UUID userId, BigDecimal amount) {
         Portfolio portfolio = owned(portfolioId, userId);
         int decimals = decimalsOf(portfolio);
-        if (amount.stripTrailingZeros().scale() > decimals) {
-            throw new InvalidAmountException(portfolio.getCurrency() + " allows at most " + decimals + " decimal places");
+        BigDecimal scaled = checkedAmount(portfolio, amount, decimals);
+        // No lock needed: adding money can't overdraw, and two inserts can't overwrite each other.
+        LedgerEntry entry = ledger.save(new LedgerEntry(portfolio.getId(), LedgerEntry.Type.DEPOSIT, scaled));
+        return view(entry, decimals);
+    }
+
+    /**
+     * Takes cash out, stored as a negative ledger entry. Fails if the balance is too low.
+     *
+     * @throws InvalidAmountException if the amount has too many decimal places for the currency
+     * @throws InsufficientFundsException if the amount is more than the current balance
+     */
+    @Transactional
+    public LedgerEntryView withdraw(UUID portfolioId, UUID userId, BigDecimal amount) {
+        // Lock first, then read the balance. Concurrent withdrawals from this portfolio queue up here, so each one
+        // sees the balance after the previous one committed. Without the lock, two of them could both see 1000
+        // and both take 600.
+        Portfolio portfolio = ownedAndLocked(portfolioId, userId);
+        int decimals = decimalsOf(portfolio);
+        BigDecimal scaled = checkedAmount(portfolio, amount, decimals);
+        BigDecimal balance = ledger.balanceOf(portfolio.getId());
+        // compareTo, not equals: for BigDecimal, 500.00 and 500.0000 are equal in value but not equals().
+        if (balance.compareTo(scaled) < 0) {
+            throw new InsufficientFundsException(portfolio.getCurrency(), balance.setScale(decimals), scaled);
         }
-        LedgerEntry entry = ledger.save(new LedgerEntry(portfolio.getId(), LedgerEntry.Type.DEPOSIT, amount.setScale(decimals)));
+        LedgerEntry entry = ledger.save(new LedgerEntry(portfolio.getId(), LedgerEntry.Type.WITHDRAWAL, scaled.negate()));
         return view(entry, decimals);
     }
 
@@ -72,11 +95,27 @@ public class PortfolioService {
     }
 
     private Portfolio owned(UUID portfolioId, UUID userId) {
-        Portfolio portfolio = portfolios.findById(portfolioId).orElseThrow(() -> new PortfolioNotFoundException(portfolioId));
+        return checkOwner(portfolios.findById(portfolioId), portfolioId, userId);
+    }
+
+    private Portfolio ownedAndLocked(UUID portfolioId, UUID userId) {
+        return checkOwner(portfolios.findWithLockById(portfolioId), portfolioId, userId);
+    }
+
+    private static Portfolio checkOwner(Optional<Portfolio> found, UUID portfolioId, UUID userId) {
+        Portfolio portfolio = found.orElseThrow(() -> new PortfolioNotFoundException(portfolioId));
         if (!portfolio.getUserId().equals(userId)) {
             throw new NotPortfolioOwnerException();
         }
         return portfolio;
+    }
+
+    /** Rejects (never rounds) amounts with more decimals than the currency has; returns it at that scale. */
+    private static BigDecimal checkedAmount(Portfolio portfolio, BigDecimal amount, int decimals) {
+        if (amount.stripTrailingZeros().scale() > decimals) {
+            throw new InvalidAmountException(portfolio.getCurrency() + " allows at most " + decimals + " decimal places");
+        }
+        return amount.setScale(decimals);
     }
 
     private int decimalsOf(Portfolio portfolio) {

@@ -10,11 +10,13 @@ public final class Scopes {
 
     public static final String PORTFOLIO_READ = "portfolio:read";
     public static final String PORTFOLIO_DEPOSIT = "portfolio:deposit";
+    /** Separate from deposit: taking money out is riskier, so a key can be allowed to add but not remove. */
+    public static final String PORTFOLIO_WITHDRAW = "portfolio:withdraw";
     /** Create, list and revoke API keys. Never grantable to an API key, so a key can't mint more keys. */
     public static final String API_KEYS_MANAGE = "api-keys:manage";
 
-    public static final Set<String> LOGIN = Set.of(PORTFOLIO_READ, PORTFOLIO_DEPOSIT, API_KEYS_MANAGE);
-    public static final Set<String> GRANTABLE_TO_API_KEYS = Set.of(PORTFOLIO_READ, PORTFOLIO_DEPOSIT);
+    public static final Set<String> LOGIN = Set.of(PORTFOLIO_READ, PORTFOLIO_DEPOSIT, PORTFOLIO_WITHDRAW, API_KEYS_MANAGE);
+    public static final Set<String> GRANTABLE_TO_API_KEYS = Set.of(PORTFOLIO_READ, PORTFOLIO_DEPOSIT, PORTFOLIO_WITHDRAW);
 
     private Scopes() {
     }
